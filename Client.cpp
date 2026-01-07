@@ -17,8 +17,9 @@ void Client::start() {
     setUpConnection();
     sendUsername();
 
-    std::thread(&Client::receiveMessages, this).detach();
+    std::thread receiverThread(&Client::receiveMessages, this);
     sendMessages();
+    receiverThread.join();
 }
 
 void Client::receiveMessages() {

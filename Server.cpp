@@ -46,7 +46,7 @@ void Server::start() {
 
 bool Server::checkLimitExceeded(SOCKET client) {
     std::lock_guard<std::mutex> lock(clientsMutex);
-    if (clients.size() >= MAX_CLIENTS) {
+    if (activeClients.size() >= MAX_CLIENTS) {
         std::string msg = "FULL";
         send(client, msg.c_str(), msg.size(), 0);
         closesocket(client);
@@ -56,18 +56,18 @@ bool Server::checkLimitExceeded(SOCKET client) {
 }
 
 bool Server::checkUsernameAvailable(SOCKET clientSocket, std::string username) {
-    std::lock_guard<std::mutex> lock(usernamesMutex);
+    std::lock_guard<std::mutex> lock(clientsMutex);
     std::string msg = "OK";
 
-    for(std::string name: usernames){
-        if(name == username){
+    for(const ActiveClient& activeClient: activeClients){
+        if(username == activeClient.username){
             msg = "Nickname taken";
             send(clientSocket, msg.c_str(), msg.size(), 0);
             closesocket(clientSocket);
             return false;
         }
     }
-    usernames.push_back(username);
+    activeClients.push_back({clientSocket, username});
     send(clientSocket, msg.c_str(), msg.size(), 0);
     return true;
 }
@@ -93,10 +93,6 @@ void Server::acceptClients() {
         if(!checkUsernameAvailable(clientSocket, username))
             continue;
 
-        clientsMutex.lock();
-        clients.push_back(clientSocket);
-        clientsMutex.unlock();
-
         std::cout << username << " connected!\n";
 
         sendMessagesHistory(clientSocket);
@@ -106,16 +102,13 @@ void Server::acceptClients() {
 
 std::string Server::getClientUsername(SOCKET client) {
     std::lock_guard<std::mutex> lock1(clientsMutex);
-    std::lock_guard<std::mutex> lock2(usernamesMutex);
 
-    for (int i=0; i<clients.size(); i++) {
-        if (clients[i] == client){
-            if (i < usernames.size())
-                return usernames[i];
-            else
-                return "ERROR";
+    for (int i=0; i<activeClients.size(); i++) {
+        if (activeClients[i].socket == client){
+            return activeClients[i].username;
         }
     }
+
     return "ERROR";
 }
 
@@ -138,15 +131,14 @@ void Server::receiveMessages(SOCKET client) {
 
     //Client disconnects
     closesocket(client);
-    {
-        std::lock_guard<std::mutex> lock(clientsMutex);
-        clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
+    std::lock_guard<std::mutex> lock(clientsMutex);
+    for (auto i = activeClients.begin(); i != activeClients.end(); i++) {
+        if (i->socket == client) {
+            activeClients.erase(i);
+            break;
+        }
     }
 
-    {
-        std::lock_guard<std::mutex> lock(usernamesMutex);
-        usernames.erase(std::remove(usernames.begin(), usernames.end(), username), usernames.end());
-    }
     std::cout << username << " disconnected\n";
 }
 
@@ -154,8 +146,8 @@ void Server::receiveMessages(SOCKET client) {
 void Server::sendBroadcast(const std::string& msg) {
     std::lock_guard<std::mutex> lock(clientsMutex);
 
-    for (SOCKET c : clients) {
-        send(c, msg.c_str(), msg.size(), 0);
+    for (ActiveClient c : activeClients) {
+        send(c.socket, msg.c_str(), msg.size(), 0);
     }
 }
 

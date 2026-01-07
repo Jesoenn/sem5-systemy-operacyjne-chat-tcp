@@ -9,15 +9,18 @@
 #include <winsock2.h>
 #include <mutex>
 
+struct ActiveClient {
+    SOCKET socket;
+    std::string username;
+};
+
 class Server {
 private:
     std::mutex clientsMutex;
-    std::mutex usernamesMutex;
     std::mutex messagesMutex;
 
+    std::vector<ActiveClient> activeClients;
     SOCKET listenSocket;
-    std::vector<SOCKET> clients;
-    std::vector<std::string> usernames;
     std::vector<std::string> messages; // Messages last 50: format: [HH:MM:SS] username: message
     std::string ip;
     int port;
