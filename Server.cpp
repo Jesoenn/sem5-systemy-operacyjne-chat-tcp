@@ -57,15 +57,18 @@ bool Server::checkLimitExceeded(SOCKET client) {
 
 bool Server::checkUsernameAvailable(SOCKET clientSocket, std::string username) {
     std::lock_guard<std::mutex> lock(usernamesMutex);
+    std::string msg = "OK";
+
     for(std::string name: usernames){
         if(name == username){
-            std::string msg = "Nickname taken";
+            msg = "Nickname taken";
             send(clientSocket, msg.c_str(), msg.size(), 0);
             closesocket(clientSocket);
             return false;
         }
     }
     usernames.push_back(username);
+    send(clientSocket, msg.c_str(), msg.size(), 0);
     return true;
 }
 

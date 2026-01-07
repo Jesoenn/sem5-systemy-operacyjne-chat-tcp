@@ -8,20 +8,22 @@
 
 #include <string>
 #include <winsock2.h>
+#include <atomic>
 
 class Client {
 private:
+    std::atomic<bool> connectionEnded = false;
     SOCKET sock;
     std::string ip, name;
     int port;
 
     void receiveMessages();
-    void sendMessages();
     void setUpConnection();
-    void checkUsername();
+    void sendUsername();
+    void sendMessages();
 
 public:
-    Client(const std::string& ip, int port, std::string name);
+    Client(std::string  ip, int port, std::string name);
     void start();
 };
 
