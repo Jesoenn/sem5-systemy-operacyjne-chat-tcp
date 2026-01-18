@@ -21,6 +21,7 @@ private:
     void setUpConnection();
     void sendUsername();
     void sendMessages();
+    void startUI();
 
 public:
     Client(std::string  ip, int port, std::string name);
