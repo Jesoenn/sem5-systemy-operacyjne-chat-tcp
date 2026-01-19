@@ -7,7 +7,7 @@
 #include <thread>
 #include <utility>
 #include <ws2tcpip.h>
-#include <ftxui/component/screen_interactive.hpp>
+
 #include <ftxui/component/component.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <mutex>
@@ -22,23 +22,17 @@ Client::Client(std::string  ip, int port, std::string name):
 
 
 void Client::startUI() {
-    using namespace ftxui;
-
-    ScreenInteractive screen = ScreenInteractive::Fullscreen();
-
-    std::vector<std::string> messages;
-    std::mutex messagesMutex;
-
     std::string inputBuffer;
-    auto input = Input(&inputBuffer, "Type message...");
+    auto input = Input(&inputBuffer, "Message...");
 
-    // Dodaj CatchEvent do inputa
     input = CatchEvent(input, [&](Event event) {
-        if (event == Event::Return && !inputBuffer.empty()) {
-            // Wyślij do serwera
-            send(sock, inputBuffer.c_str(), inputBuffer.size(), 0);
+        if (connectionEnded) {
+            screen.ExitLoopClosure()();
+            return true;
+        }
 
-            // Nie dodajemy "Me: ..." lokalnie, bo serwer zwróci to, co pokazać
+        if (event == Event::Return && !inputBuffer.empty()) {
+            sendMessages(inputBuffer);
             inputBuffer.clear();
             return true;
         }
@@ -46,15 +40,13 @@ void Client::startUI() {
     });
 
 
-    // Górne okno - wyświetlanie wiadomości
+    // Top window
     auto messagesBox = Renderer([&] {
         Elements elements;
         std::lock_guard<std::mutex> lock(messagesMutex);
 
-        // pokaż tylko ostatnie 50 wiadomości
-        if (messages.size() > 50) {
+        if (messages.size() > 50)
             messages.erase(messages.begin(), messages.begin() + (messages.size() - 50));
-        }
 
         for (auto& msg : messages)
             elements.push_back(text(msg));
@@ -62,51 +54,22 @@ void Client::startUI() {
         return vbox(elements) | border | flex;
     });
 
-    // Dolne okno - input
+    // Bottom window
     auto inputBox = Renderer(input, [&] {
-        return hbox({text("> ") | bold, input->Render() | flex}) | border;
+        return input->Render() | border;
     });
 
-    // Kontener wszystkich komponentów
     auto layout = Container::Vertical({messagesBox, inputBox});
-
-    std::thread receiver([&] {
-        char buffer[512];
-        while (!connectionEnded) {
-            int bytesReceived = recv(sock, buffer, sizeof(buffer) - 1, 0);
-            if (bytesReceived <= 0) break;
-
-            buffer[bytesReceived] = '\0';
-            std::string msg(buffer);
-
-            {
-                std::lock_guard<std::mutex> lock(messagesMutex);
-                messages.push_back(msg);
-            }
-
-            // Wymuszenie natychmiastowego odświeżenia GUI
-            screen.PostEvent(Event::Custom);
-        }
-        connectionEnded = true;
-    });
-
-
     screen.Loop(layout);
-    receiver.join();
 }
-
-
-
 
 
 void Client::start() {
     setUpConnection();
     sendUsername();
+    std::thread receiverThread(&Client::receiveMessages, this);
     startUI();
-
-//    std::thread receiverThread(&Client::receiveMessages, this);
-//    sendMessages();
-//    receiverThread.join();
+    receiverThread.join();
 }
 
 void Client::receiveMessages() {
@@ -114,9 +77,22 @@ void Client::receiveMessages() {
     while (true) {
         int bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) break;
-
         buffer[bytesReceived] = '\0';
-        std::cout <<buffer << "\n";
+        std::string msg(buffer);
+
+        int prevStart = 0;
+        std::lock_guard<std::mutex> lock(messagesMutex);
+        for (int i =0; i<msg.length(); i++){
+            if(msg[i] == '\n'){
+                messages.push_back(msg.substr(prevStart, i - prevStart + 1));
+                prevStart = i+1;
+            }
+        }
+        if (prevStart < msg.length()){
+            messages.push_back( msg.substr(prevStart) );
+        }
+
+        screen.PostEvent(Event::Custom);
     }
     std::cout<<"Connection ended by server\n";
     connectionEnded = true;
@@ -168,13 +144,7 @@ void Client::sendUsername() {
 }
 
 
-void Client::sendMessages() {
-    std::string msg;
-    while (true) {
-        std::getline(std::cin, msg);
-        if(connectionEnded)
-            break;
-        send(sock, msg.c_str(), msg.size(), 0);
-    }
+void Client::sendMessages(const std::string& msg) {
+    send(sock, msg.c_str(), msg.size(), 0);
 }
 
