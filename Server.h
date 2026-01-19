@@ -6,11 +6,13 @@
 #define SO_PROJEKT2_SERVER_H
 #include <string>
 #include <vector>
-#include <winsock2.h>
 #include <mutex>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 struct ActiveClient {
-    SOCKET socket;
+    int socket;
     std::string username;
 };
 
@@ -20,22 +22,22 @@ private:
     std::mutex messagesMutex;
 
     std::vector<ActiveClient> activeClients;
-    SOCKET listenSocket;
+    int listenSocket;
     std::vector<std::string> messages; // Messages last 50: format: [HH:MM:SS] username: message
     std::string ip;
     int port;
 
     void acceptClients(); // Accepting clients in loop -> limit 16!
-    bool checkUsernameAvailable(SOCKET clientSocket, std::string username); // Check if username is already connected
-    void receiveMessages(SOCKET client); // Receive messages from clients
-    void sendMessagesHistory(SOCKET client); // Send all messages to newly connected client
+    bool checkUsernameAvailable(int clientSocket, std::string username); // Check if username is already connected
+    void receiveMessages(int client); // Receive messages from clients
+    void sendMessagesHistory(int client); // Send all messages to newly connected client
     void sendBroadcast(const std::string& msg); // Send new message to all clients
 
     void saveMsg(const std::string& msg); //Saves message to messages
 
-    bool checkLimitExceeded(SOCKET client); // Check number of clients connected
+    bool checkLimitExceeded(int client); // Check number of clients connected
     std::string getCurrentTime();
-    std::string getClientUsername(SOCKET client);
+    std::string getClientUsername(int client);
 
 
 public:

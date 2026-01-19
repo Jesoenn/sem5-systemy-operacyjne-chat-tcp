@@ -5,10 +5,7 @@
 #include "Server.h"
 #include <iostream>
 #include <thread>
-#include <ws2tcpip.h>
 #include <algorithm>
-
-#pragma comment(lib, "Ws2_32.lib")
 
 const int MAX_CLIENTS = 16;
 const int MAX_MESSAGES = 50;
@@ -17,13 +14,8 @@ Server::Server(const std::string& ip, int port) :
         ip(ip), port(port) {}
 
 void Server::start() {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
-        throw std::invalid_argument("WSAStartup failed");
-    }
-
-    listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listenSocket == INVALID_SOCKET) {
+    listenSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (listenSocket == -1) {
         throw std::invalid_argument("Socket creation failed");
     }
 
@@ -32,11 +24,11 @@ void Server::start() {
     serverAddr.sin_port = htons(port);
     inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr);
 
-    if (bind(listenSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+    if (bind(listenSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         throw std::invalid_argument("Bind failed");
     }
 
-    if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR) {
+    if (listen(listenSocket, SOMAXCONN) == -1) {
         throw std::invalid_argument("Listen failed");
     }
 
@@ -44,18 +36,18 @@ void Server::start() {
     acceptClients();
 }
 
-bool Server::checkLimitExceeded(SOCKET client) {
+bool Server::checkLimitExceeded(int client) {
     std::lock_guard<std::mutex> lock(clientsMutex);
     if (activeClients.size() >= MAX_CLIENTS) {
         std::string msg = "FULL";
         send(client, msg.c_str(), msg.size(), 0);
-        closesocket(client);
+        close(client);
         return true;
     }
     return false;
 }
 
-bool Server::checkUsernameAvailable(SOCKET clientSocket, std::string username) {
+bool Server::checkUsernameAvailable(int clientSocket, std::string username) {
     std::lock_guard<std::mutex> lock(clientsMutex);
     std::string msg = "OK";
 
@@ -63,7 +55,7 @@ bool Server::checkUsernameAvailable(SOCKET clientSocket, std::string username) {
         if(username == activeClient.username){
             msg = "Nickname taken";
             send(clientSocket, msg.c_str(), msg.size(), 0);
-            closesocket(clientSocket);
+            close(clientSocket);
             return false;
         }
     }
@@ -74,8 +66,8 @@ bool Server::checkUsernameAvailable(SOCKET clientSocket, std::string username) {
 
 void Server::acceptClients() {
     while (true) {
-        SOCKET clientSocket = accept(listenSocket, nullptr, nullptr);
-        if (clientSocket == INVALID_SOCKET) continue;
+        int clientSocket = accept(listenSocket, nullptr, nullptr);
+        if (clientSocket == -1) continue;
 
         if(checkLimitExceeded(clientSocket))
             continue;
@@ -84,7 +76,7 @@ void Server::acceptClients() {
         char buffer[256];
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer)-1, 0);
         if (bytesReceived <= 0) {
-            closesocket(clientSocket);
+            close(clientSocket);
             continue;
         }
         buffer[bytesReceived] = '\0';
@@ -100,7 +92,7 @@ void Server::acceptClients() {
     }
 }
 
-std::string Server::getClientUsername(SOCKET client) {
+std::string Server::getClientUsername(int client) {
     std::lock_guard<std::mutex> lock1(clientsMutex);
 
     for (int i=0; i<activeClients.size(); i++) {
@@ -112,7 +104,7 @@ std::string Server::getClientUsername(SOCKET client) {
     return "ERROR";
 }
 
-void Server::receiveMessages(SOCKET client) {
+void Server::receiveMessages(int client) {
     char buffer[512];
     std::string username= getClientUsername(client);
 
@@ -130,7 +122,7 @@ void Server::receiveMessages(SOCKET client) {
     }
 
     //Client disconnects
-    closesocket(client);
+    close(client);
     std::lock_guard<std::mutex> lock(clientsMutex);
     for (auto i = activeClients.begin(); i != activeClients.end(); i++) {
         if (i->socket == client) {
@@ -151,7 +143,7 @@ void Server::sendBroadcast(const std::string& msg) {
     }
 }
 
-void Server::sendMessagesHistory(SOCKET client) {
+void Server::sendMessagesHistory(int client) {
     std::lock_guard<std::mutex> lock(messagesMutex);
     for (std::string msg: messages) {
         msg += "\n";

@@ -8,8 +8,6 @@
 #include <iostream>
 #include <thread>
 #include <utility>
-#include <ws2tcpip.h>
-
 #include <ftxui/component/component.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <mutex>
@@ -107,13 +105,8 @@ void Client::receiveMessages() {
 }
 
 void Client::setUpConnection() {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
-        throw std::invalid_argument("WSAStartup failed\n");
-    }
-
-    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock == INVALID_SOCKET) {
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1) {
         throw std::invalid_argument("Socket creation failed\n");
     }
 
@@ -122,7 +115,7 @@ void Client::setUpConnection() {
     serverAddr.sin_port = htons(port);
     inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr);
 
-    if (connect(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+    if (connect(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         throw std::invalid_argument("Connection failed\n");
     }
     std::cout << "Connected to server " << ip << ":" << port << "\n";
@@ -135,7 +128,7 @@ void Client::sendUsername() {
     char buffer[512];
     int bytesReceived = recv(sock, buffer, sizeof(buffer) - 1, 0); // zostawiamy miejsce na '\0'
     if (bytesReceived <= 0) {
-        closesocket(sock);
+        close(sock);
         throw std::invalid_argument("Connection ended by server");
     }
 
@@ -143,10 +136,10 @@ void Client::sendUsername() {
     std::string response(buffer);
 
     if (response == "FULL") {
-        closesocket(sock);
+        close(sock);
         throw std::invalid_argument("Server is full");
     } else if (response == "Nickname taken") {
-        closesocket(sock);
+        close(sock);
         throw std::invalid_argument("Nickname is already taken");
     }
 }

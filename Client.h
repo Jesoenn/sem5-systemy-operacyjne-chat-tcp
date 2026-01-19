@@ -7,7 +7,9 @@
 
 
 #include <string>
-#include <winsock2.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include <atomic>
 #include <vector>
 #include <ftxui/component/screen_interactive.hpp>
@@ -22,7 +24,7 @@ private:
     ScreenInteractive screen = ScreenInteractive::Fullscreen();
 
     std::atomic<bool> connectionEnded = false;
-    SOCKET sock;
+    int sock;
     std::string ip, name;
     int port;
 
