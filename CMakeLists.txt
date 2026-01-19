@@ -7,7 +7,11 @@ add_executable(so_projekt2 main.cpp
         Server.cpp
         Server.h
         Client.cpp
-        Client.h)
+        Client.h
+        tests/Timer.h
+        tests/Timer.cpp
+        tests/FileManager.cpp
+        tests/FileManager.h)
 
 include(FetchContent)
 

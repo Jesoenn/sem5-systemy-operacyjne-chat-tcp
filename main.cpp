@@ -7,7 +7,7 @@
 
 void err_wrong_usage(){
     std::string err = "Usage:\n  Server: so_projekt2 -s IP PORT\n"
-                      "  Client: so_projekt2 -c IP PORT NAME\n";
+                      "  Client: so_projekt2 -c[d] IP PORT NAME\n";
     throw std::invalid_argument(err);
 }
 
@@ -24,13 +24,14 @@ int main(int argc, char* argv[]) {
     if (mode == "-s") {
         Server server(ip, port);
         server.start();
-    } else if (mode == "-c") {
+    } else if (mode == "-c" || mode == "-cd") {
         if ( argc != 5 ){
             err_wrong_usage();
         }
         std::string name = argv[4];
+        bool debug = (mode == "-cd");
 
-        Client client(ip, port, name);
+        Client client(debug, ip, port, name);
         client.start();
     } else {
         throw std::invalid_argument("Unknown mode");

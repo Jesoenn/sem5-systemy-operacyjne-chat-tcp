@@ -15,6 +15,8 @@ using namespace ftxui;
 
 class Client {
 private:
+    const bool debug;
+
     std::vector<std::string> messages;
     std::mutex messagesMutex;
     ScreenInteractive screen = ScreenInteractive::Fullscreen();
@@ -30,8 +32,10 @@ private:
     void sendMessages(const std::string& msg);
     void startUI();
 
+    void startTest();
+
 public:
-    Client(std::string  ip, int port, std::string name);
+    Client(bool debug, std::string  ip, int port, std::string name);
     void start();
 };
 

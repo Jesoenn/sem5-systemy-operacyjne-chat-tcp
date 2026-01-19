@@ -3,6 +3,8 @@
 //
 
 #include "Client.h"
+#include "tests/FileManager.h"
+#include "tests/Timer.h"
 #include <iostream>
 #include <thread>
 #include <utility>
@@ -11,13 +13,14 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <mutex>
+#include <random>
 
 using namespace ftxui;
 
 #pragma comment(lib, "Ws2_32.lib")
 
-Client::Client(std::string  ip, int port, std::string name):
-    ip(std::move(ip)), port(port), name(std::move(name)) {}
+Client::Client(bool debug, std::string  ip, int port, std::string name):
+    ip(std::move(ip)), port(port), name(std::move(name)), debug(debug) {}
 
 
 
@@ -67,9 +70,14 @@ void Client::startUI() {
 void Client::start() {
     setUpConnection();
     sendUsername();
-    std::thread receiverThread(&Client::receiveMessages, this);
-    startUI();
-    receiverThread.join();
+
+    if (!debug){
+        std::thread receiverThread(&Client::receiveMessages, this);
+        startUI();
+        receiverThread.join();
+    } else {
+        startTest();
+    }
 }
 
 void Client::receiveMessages() {
@@ -146,5 +154,55 @@ void Client::sendUsername() {
 
 void Client::sendMessages(const std::string& msg) {
     send(sock, msg.c_str(), msg.size(), 0);
+}
+
+void Client::startTest() {
+    FileManager fileManager;
+    Timer timer;
+    const int iterations = 12;
+
+    std::vector<int> messageSizes = {10, 100, 250, 500, 1000, 10000};
+    int currentMessageSizeIndex = 0;
+    int iterationPerSize = iterations / messageSizes.size();
+
+    bool messageIncoming = false;
+    for (int i = 0; i < iterations; i++) {
+        if( i>0 && i % iterationPerSize == 0 && currentMessageSizeIndex < messageSizes.size() -1){
+            currentMessageSizeIndex++;
+        }
+        std::cout<<"i "<<i+1<<"\tIteracja "<<(i%iterationPerSize+1)<<"\tWiadomosc "<<messageSizes[currentMessageSizeIndex]<<"\n";
+
+        std::string msg="";
+        bool correct = false;
+
+        msg += "!";
+        for ( int j =0; j<messageSizes[currentMessageSizeIndex]-2; j++){
+            msg += 'x';
+        }
+        msg += "!";
+
+        timer.start();
+        sendMessages(msg);
+        while (!correct){
+            char buffer[512];
+            int bytesReceived = recv(sock, buffer, sizeof(buffer) - 1, 0);
+            if (bytesReceived <= 0) {
+                throw std::invalid_argument("Connection ended by server");
+            }
+            buffer[bytesReceived] = '\0';
+            std::string response(buffer);
+
+            for(int k=0; k<response.length(); k++){
+                if(response[k] == '!' && !messageIncoming){
+                    messageIncoming = true;
+                } else if (response[k] == '!' && messageIncoming) {
+                    messageIncoming = false;
+                    correct = true;
+                }
+            }
+        }
+        timer.stop();
+        fileManager.addMessageReceived(name, messageSizes[currentMessageSizeIndex], timer.result());
+    }
 }
 
